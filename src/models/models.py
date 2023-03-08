@@ -11,6 +11,3 @@ class Streams(db.Model):
 
     created_date: datetime = db.Column(db.DateTime)
     modified_date: datetime = db.Column(db.DateTime)
-
-    def __init__(self, stream_date: datetime) -> None:
-        self.stream_date = stream_date
