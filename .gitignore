@@ -3,3 +3,7 @@ data
 auth.txt
 __pycache__
 instance
+.mypy_cache
+temp
+migrations
+instance
