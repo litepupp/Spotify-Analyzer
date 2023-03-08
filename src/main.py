@@ -1,4 +1,4 @@
-from preprocess import preprocess_streams
+from src.preprocess import preprocess_streams
 
 INPUT_PATH = "./data/input"
 OUTPUT_PATH = "./data/output"
