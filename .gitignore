@@ -6,4 +6,3 @@ instance
 .mypy_cache
 temp
 migrations
-instance
