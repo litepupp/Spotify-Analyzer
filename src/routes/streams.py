@@ -13,22 +13,22 @@ streams_marshal = api.model(
         "id": fields.Integer(
             required=True, attribute="id", description="the id of stream"
         ),
-        "streamDate": fields.DateTime(
+        "stream_date": fields.DateTime(
             required=True,
             attribute="stream_date",
             description="The datetime when a track was streamed in UTC",
         ),
-        "msPlayed": fields.Integer(
+        "ms_played": fields.Integer(
             required=True,
             attribute="ms_played",
             description="The amount of time a track was streamed for in milliseconds",
         ),
-        "reasonStart": fields.String(
+        "reason_start": fields.String(
             required=True,
             attribute="reason_start",
             description="The reason why a track started streamed",
         ),
-        "reasonEnd": fields.String(
+        "reason_end": fields.String(
             required=True,
             attribute="reason_end",
             description="The reason why a track ended streaming",
