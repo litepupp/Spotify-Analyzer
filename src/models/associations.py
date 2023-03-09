@@ -56,3 +56,41 @@ genres_tracks = db.Table(
         nullable=False,
     ),
 )
+
+# Association table for many to many relationship between artists and tracks
+artists_tracks = db.Table(
+    "artists_tracks",
+    db.Column(
+        "artist_id",
+        db.Integer,
+        db.ForeignKey("artists.id"),
+        primary_key=True,
+        nullable=False,
+    ),
+    db.Column(
+        "track_id",
+        db.Integer,
+        db.ForeignKey("tracks.id"),
+        primary_key=True,
+        nullable=False,
+    ),
+)
+
+# Association table for many to many relationship between artists and albums
+artists_albums = db.Table(
+    "artists_albums",
+    db.Column(
+        "artist_id",
+        db.Integer,
+        db.ForeignKey("artists.id"),
+        primary_key=True,
+        nullable=False,
+    ),
+    db.Column(
+        "album_id",
+        db.Integer,
+        db.ForeignKey("albums.id"),
+        primary_key=True,
+        nullable=False,
+    ),
+)

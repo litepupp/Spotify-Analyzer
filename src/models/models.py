@@ -1,6 +1,12 @@
 from datetime import datetime
 from src.server.extensions import db
-from src.models.associations import genres_artists, genres_albums, genres_tracks
+from src.models.associations import (
+    genres_artists,
+    genres_albums,
+    genres_tracks,
+    artists_tracks,
+    artists_albums,
+)
 
 
 class Streams(db.Model):
@@ -33,6 +39,11 @@ class Tracks(db.Model):
     album_id = db.Column(db.Integer, db.ForeignKey("albums.id"), nullable=False)
     album = db.relationship("Albums", back_populates="tracks")
 
+    # Many to many relationship with artists using artists_tracks association table
+    artists = db.relationship(
+        "Artists", secondary=artists_tracks, back_populates="tracks"
+    )
+
     # One to many relationship with streams
     streams = db.relationship("Streams", back_populates="track")
 
@@ -60,6 +71,11 @@ class Albums(db.Model):
     # One to many relationship with tracks
     tracks = db.relationship("Tracks", back_populates="album")
 
+    # Many to many relationship with artists using artists_albums association table
+    artists = db.relationship(
+        "Artists", secondary=artists_albums, back_populates="albums"
+    )
+
     # Many to many relationship with genres using genres_albums association table
     genres = db.relationship("Genres", secondary=genres_albums, back_populates="albums")
 
@@ -83,6 +99,16 @@ class Artists(db.Model):
     # Many to many relationship with genres using genres_artists association table
     genres = db.relationship(
         "Genres", secondary=genres_artists, back_populates="artists"
+    )
+
+    # Many to many relationship with tracks using artists_tracks association table
+    genres = db.relationship(
+        "Tracks", secondary=artists_tracks, back_populates="artists"
+    )
+
+    # Many to many relationship with albums using artists_albums association table
+    genres = db.relationship(
+        "Albums", secondary=artists_albums, back_populates="artists"
     )
 
     followers: int = db.Column(db.Integer, nullable=False)
