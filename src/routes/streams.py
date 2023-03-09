@@ -10,10 +10,38 @@ api = Namespace(
 streams_marshal = api.model(
     name="Streams",
     model={
+        "id": fields.Integer(
+            required=True, attribute="id", description="the id of stream"
+        ),
         "streamDate": fields.DateTime(
             required=True,
             attribute="stream_date",
-            description="The datetime when a track was streamed",
+            description="The datetime when a track was streamed in UTC",
+        ),
+        "msPlayed": fields.Integer(
+            required=True,
+            attribute="ms_played",
+            description="The amount of time a track was streamed for in milliseconds",
+        ),
+        "reasonStart": fields.String(
+            required=True,
+            attribute="reason_start",
+            description="The reason why a track started streamed",
+        ),
+        "reasonEnd": fields.String(
+            required=True,
+            attribute="reason_end",
+            description="The reason why a track ended streaming",
+        ),
+        "shuffle": fields.Boolean(
+            required=True,
+            attribute="shuffle",
+            description="If shuffle mode was used when streaming the track",
+        ),
+        "skipped": fields.String(
+            required=True,
+            attribute="skipped",
+            description="If the user skipped to the next song",
         ),
     },
 )
@@ -21,17 +49,22 @@ streams_marshal = api.model(
 
 @api.route("/")
 class StreamsResource(Resource):
-    @api.doc("Get all streams")
-    @api.marshal_with(streams_marshal)
+    @api.doc("test doc decoration")
+    @api.marshal_with(streams_marshal, as_list=True)
     def get(self):
-        """
-        dsd
-        """
         return db.session.query(Streams).all()
 
     @api.doc("create field")
+    @api.marshal_with(streams_marshal)
     def post(self):
-        stream = Streams(stream_date=datetime.datetime(year=1999, month=12, day=1))
+        stream = Streams(
+            stream_date=datetime.datetime.now(),
+            ms_played=1000,
+            reason_start="start reason",
+            reason_end="end reasonnnn",
+            shuffle=False,
+            skipped="maybe???",
+        )
         db.session.add(stream)
         db.session.commit()
         return stream
