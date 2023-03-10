@@ -45,7 +45,7 @@ def preprocess_streams(
     """
     auth_manager = spotipy.oauth2.SpotifyOAuth(
         client_id=client_id,
-        client_secret=client_id,
+        client_secret=client_secret,
         redirect_uri="http://example.com/",
     )
     sp = spotipy.Spotify(auth_manager=auth_manager)
