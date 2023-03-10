@@ -11,12 +11,17 @@ from src.models.associations import (
 
 class Streams(db.Model):
     __tablename__: str = "streams"
+    __table_args__ = (db.UniqueConstraint("stream_date", "track_id"),)
 
     id: int = db.Column(db.Integer, primary_key=True, autoincrement=True)
 
     # Many to one relationship to tracks
     track_id = db.Column(db.Integer, db.ForeignKey("tracks.id"), nullable=False)
     track = db.relationship("Tracks", back_populates="streams")
+    
+    # Many to one relationship to albums
+    album_id = db.Column(db.Integer, db.ForeignKey("albums.id"), nullable=False)
+    album = db.relationship("Albums", back_populates="streams")
 
     stream_date: datetime = db.Column(db.DateTime, nullable=False)
     ms_played: int = db.Column(db.Integer, nullable=False)
@@ -55,7 +60,7 @@ class Tracks(db.Model):
     explicit: bool = db.Column(db.Boolean, nullable=False)
     name: str = db.Column(db.String, nullable=False)
     popularity: int = db.Column(db.Integer, nullable=False)
-    preview_url: str = db.Column(db.String, nullable=False)
+    preview_url: str = db.Column(db.String)
     track_number: int = db.Column(db.Integer, nullable=False)
 
     created_date: datetime = db.Column(db.DateTime)
@@ -75,6 +80,9 @@ class Albums(db.Model):
     artists = db.relationship(
         "Artists", secondary=artists_albums, back_populates="albums"
     )
+    
+    # One to many relationship with streams
+    streams = db.relationship("Streams", back_populates="album")
 
     # Many to many relationship with genres using genres_albums association table
     genres = db.relationship("Genres", secondary=genres_albums, back_populates="albums")
