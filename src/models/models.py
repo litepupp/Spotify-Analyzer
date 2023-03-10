@@ -18,12 +18,12 @@ class Streams(db.Model):
     track_id = db.Column(db.Integer, db.ForeignKey("tracks.id"), nullable=False)
     track = db.relationship("Tracks", back_populates="streams")
 
-    stream_date: datetime = db.Column(db.DateTime, nullable=False, unique=True)
+    stream_date: datetime = db.Column(db.DateTime, nullable=False)
     ms_played: int = db.Column(db.Integer, nullable=False)
+    ratio_played: float = db.Column(db.Numeric, nullable=False)
     reason_start: str = db.Column(db.String, nullable=False)
     reason_end: str = db.Column(db.String, nullable=False)
     shuffle: bool = db.Column(db.Boolean, nullable=False)
-    skipped: str = db.Column(db.String, nullable=False)
 
     created_date: datetime = db.Column(db.DateTime)
     modified_date: datetime = db.Column(db.DateTime)
@@ -102,12 +102,12 @@ class Artists(db.Model):
     )
 
     # Many to many relationship with tracks using artists_tracks association table
-    genres = db.relationship(
+    tracks = db.relationship(
         "Tracks", secondary=artists_tracks, back_populates="artists"
     )
 
     # Many to many relationship with albums using artists_albums association table
-    genres = db.relationship(
+    albums = db.relationship(
         "Albums", secondary=artists_albums, back_populates="artists"
     )
 
