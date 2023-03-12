@@ -43,7 +43,7 @@ class Streams(db.Model):
 
     stream_date: datetime = db.Column(db.DateTime, nullable=False)
     ms_played: int = db.Column(db.Integer, nullable=False)
-    ratio_played: float = db.Column(db.Numeric, nullable=False)
+    ratio_played: float = db.Column(db.Numeric(asdecimal=False), nullable=False)
     reason_start: str = db.Column(db.String, nullable=False)
     reason_end: str = db.Column(db.String, nullable=False)
     shuffle: bool = db.Column(db.Boolean, nullable=False)

@@ -179,6 +179,14 @@ def create_track(stream_record_uri: str, sp: spotipy.Spotify) -> Tracks:
 
 
 def create_stream(stream_record: dict, track: Tracks) -> None:
+    if track.duration_ms > 0:
+        if (stream_record["ms_played"] / track.duration_ms) <= 1.0:
+            ratio_played = stream_record["ms_played"] / track.duration_ms
+        else:
+            ratio_played = 1.0
+    else:
+        ratio_played = 0.0
+
     stream = Streams(
         track_id=track.id,
         album_id=track.album_id,
@@ -186,9 +194,7 @@ def create_stream(stream_record: dict, track: Tracks) -> None:
             stream_record["ts"], "%Y-%m-%dT%H:%M:%SZ"
         ),
         ms_played=stream_record["ms_played"],
-        ratio_played=(stream_record["ms_played"] / track.duration_ms)
-        if ((stream_record["ms_played"] / track.duration_ms) <= 1.0)
-        else 1.0,
+        ratio_played=ratio_played,
         reason_start=stream_record["reason_start"],
         reason_end=stream_record["reason_end"],
         shuffle=stream_record["shuffle"],
@@ -198,14 +204,25 @@ def create_stream(stream_record: dict, track: Tracks) -> None:
 
     for track_artist in track.artists:
         track_artist.streams.append(stream)
-        db.session.add(track_artist)
+        try:
+            db.session.add(track_artist)
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
 
     for album_artist in track.album.artists:
         album_artist.streams.append(stream)
-        db.session.add(album_artist)
+        try:
+            db.session.add(album_artist)
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
 
-    db.session.add(stream)
-    db.session.commit()
+    try:
+        db.session.add(stream)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
 
 
 def process_stream_record(stream_record: dict, sp: spotipy.Spotify) -> None:
@@ -238,7 +255,7 @@ def process_all_streams(
         client_secret="",
         redirect_uri="http://example.com/",
     )
-    sp = spotipy.Spotify(auth_manager=auth_manager)
+    sp = spotipy.Spotify(auth_manager=auth_manager, language="ja")
 
     with open(file=json_file_path, mode="r", encoding="UTF-8") as json_file:
         try:

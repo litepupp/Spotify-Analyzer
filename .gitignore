@@ -7,3 +7,4 @@ instance
 temp
 migrations
 .cache
+.vscode
