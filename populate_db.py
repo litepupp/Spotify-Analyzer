@@ -3,6 +3,7 @@ import os
 import json
 import glob
 import datetime
+import re
 
 import spotipy
 import tqdm
@@ -251,10 +252,11 @@ def process_all_streams(
     json_file_path: str, client_id: str, client_secret: str
 ) -> None:
     auth_manager = spotipy.oauth2.SpotifyOAuth(
-        client_id="",
-        client_secret="",
+        client_id=client_id,
+        client_secret=client_secret,
         redirect_uri="http://example.com/",
     )
+
     sp = spotipy.Spotify(auth_manager=auth_manager, language="ja")
 
     with open(file=json_file_path, mode="r", encoding="UTF-8") as json_file:
@@ -281,6 +283,9 @@ if __name__ == "__main__":
 
     with open(file=AUTH_PATH, mode="r", encoding="ascii") as file:
         CLIENT_ID, CLIENT_SECRET = file.readlines()
+
+    CLIENT_ID = CLIENT_ID.rstrip()
+    CLIENT_SECRET = CLIENT_SECRET.rstrip()
 
     aggregate_json_files(INPUT_PATH, OUTPUT_FILE)
 
