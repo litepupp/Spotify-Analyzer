@@ -94,3 +94,22 @@ artists_albums = db.Table(
         nullable=False,
     ),
 )
+
+# Association table for many to many relationship between artists and streams
+artists_streams = db.Table(
+    "artists_streams",
+    db.Column(
+        "artist_id",
+        db.Integer,
+        db.ForeignKey("artists.id"),
+        primary_key=True,
+        nullable=False,
+    ),
+    db.Column(
+        "stream_id",
+        db.Integer,
+        db.ForeignKey("streams.id"),
+        primary_key=True,
+        nullable=False,
+    ),
+)

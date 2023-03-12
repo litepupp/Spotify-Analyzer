@@ -6,7 +6,20 @@ from src.models.associations import (
     genres_tracks,
     artists_tracks,
     artists_albums,
+    artists_streams,
 )
+
+
+class OldTrackUris(db.Model):
+    __tablename__: str = "old_track_uris"
+    __table_args__ = (db.UniqueConstraint("old_uri", "track_id"),)
+
+    id: int = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    old_uri: str = db.Column(db.String, nullable=False)
+
+    # Many to one relationship to tracks
+    track_id = db.Column(db.Integer, db.ForeignKey("tracks.id"), nullable=False)
+    track = db.relationship("Tracks", back_populates="old_uris")
 
 
 class Streams(db.Model):
@@ -18,10 +31,15 @@ class Streams(db.Model):
     # Many to one relationship to tracks
     track_id = db.Column(db.Integer, db.ForeignKey("tracks.id"), nullable=False)
     track = db.relationship("Tracks", back_populates="streams")
-    
+
     # Many to one relationship to albums
     album_id = db.Column(db.Integer, db.ForeignKey("albums.id"), nullable=False)
     album = db.relationship("Albums", back_populates="streams")
+
+    # Many to many relationship with artists using artists_streams association table
+    artists = db.relationship(
+        "Artists", secondary=artists_streams, back_populates="streams"
+    )
 
     stream_date: datetime = db.Column(db.DateTime, nullable=False)
     ms_played: int = db.Column(db.Integer, nullable=False)
@@ -30,8 +48,8 @@ class Streams(db.Model):
     reason_end: str = db.Column(db.String, nullable=False)
     shuffle: bool = db.Column(db.Boolean, nullable=False)
 
-    created_date: datetime = db.Column(db.DateTime)
-    modified_date: datetime = db.Column(db.DateTime)
+    created_date: datetime = db.Column(db.DateTime, nullable=False)
+    modified_date: datetime = db.Column(db.DateTime, nullable=False)
 
 
 class Tracks(db.Model):
@@ -39,6 +57,9 @@ class Tracks(db.Model):
 
     id: int = db.Column(db.Integer, primary_key=True, autoincrement=True)
     uri: str = db.Column(db.String, nullable=False, unique=True)
+
+    # One to many relationship with old_track_uris
+    old_uris = db.relationship("OldTrackUris", back_populates="track")
 
     # Many to one relationship to albums
     album_id = db.Column(db.Integer, db.ForeignKey("albums.id"), nullable=False)
@@ -63,8 +84,8 @@ class Tracks(db.Model):
     preview_url: str = db.Column(db.String)
     track_number: int = db.Column(db.Integer, nullable=False)
 
-    created_date: datetime = db.Column(db.DateTime)
-    modified_date: datetime = db.Column(db.DateTime)
+    created_date: datetime = db.Column(db.DateTime, nullable=False)
+    modified_date: datetime = db.Column(db.DateTime, nullable=False)
 
 
 class Albums(db.Model):
@@ -80,7 +101,7 @@ class Albums(db.Model):
     artists = db.relationship(
         "Artists", secondary=artists_albums, back_populates="albums"
     )
-    
+
     # One to many relationship with streams
     streams = db.relationship("Streams", back_populates="album")
 
@@ -91,11 +112,12 @@ class Albums(db.Model):
     total_tracks: int = db.Column(db.Integer, nullable=False)
     name: str = db.Column(db.String, nullable=False)
     release_date: datetime = db.Column(db.DateTime, nullable=False)
-    label: str = db.Column(db.String, nullable=False)
+    label: str = db.Column(db.String)
     popularity: int = db.Column(db.Integer, nullable=False)
+    image_url: str = db.Column(db.String)
 
-    created_date: datetime = db.Column(db.DateTime)
-    modified_date: datetime = db.Column(db.DateTime)
+    created_date: datetime = db.Column(db.DateTime, nullable=False)
+    modified_date: datetime = db.Column(db.DateTime, nullable=False)
 
 
 class Artists(db.Model):
@@ -103,11 +125,6 @@ class Artists(db.Model):
 
     id: int = db.Column(db.Integer, primary_key=True, autoincrement=True)
     uri: str = db.Column(db.String, nullable=False, unique=True)
-
-    # Many to many relationship with genres using genres_artists association table
-    genres = db.relationship(
-        "Genres", secondary=genres_artists, back_populates="artists"
-    )
 
     # Many to many relationship with tracks using artists_tracks association table
     tracks = db.relationship(
@@ -119,12 +136,23 @@ class Artists(db.Model):
         "Albums", secondary=artists_albums, back_populates="artists"
     )
 
+    # Many to many relationship with streams using artists_streams association table
+    streams = db.relationship(
+        "Streams", secondary=artists_streams, back_populates="artists"
+    )
+
+    # Many to many relationship with genres using genres_artists association table
+    genres = db.relationship(
+        "Genres", secondary=genres_artists, back_populates="artists"
+    )
+
     followers: int = db.Column(db.Integer, nullable=False)
     name: str = db.Column(db.String, nullable=False)
     popularity: int = db.Column(db.Integer, nullable=False)
+    image_url: str = db.Column(db.String)
 
-    created_date: datetime = db.Column(db.DateTime)
-    modified_date: datetime = db.Column(db.DateTime)
+    created_date: datetime = db.Column(db.DateTime, nullable=False)
+    modified_date: datetime = db.Column(db.DateTime, nullable=False)
 
 
 class Genres(db.Model):
@@ -143,6 +171,3 @@ class Genres(db.Model):
 
     # Many to many relationship with albums using genres_tracks association table
     tracks = db.relationship("Tracks", secondary=genres_tracks, back_populates="genres")
-
-    created_date: datetime = db.Column(db.DateTime)
-    modified_date: datetime = db.Column(db.DateTime)
