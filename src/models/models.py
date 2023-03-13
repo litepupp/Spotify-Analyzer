@@ -84,6 +84,19 @@ class Tracks(db.Model):
     preview_url: str = db.Column(db.String)
     track_number: int = db.Column(db.Integer, nullable=False)
 
+    acousticness: float = db.Column(db.Numeric(asdecimal=False))
+    danceability: float = db.Column(db.Numeric(asdecimal=False))
+    energy: float = db.Column(db.Numeric(asdecimal=False))
+    instrumentalness: float = db.Column(db.Numeric(asdecimal=False))
+    key: int = db.Column(db.Integer)
+    liveness: float = db.Column(db.Numeric(asdecimal=False))
+    loudness: float = db.Column(db.Numeric(asdecimal=False))
+    mode: int = db.Column(db.Integer)
+    speechiness: float = db.Column(db.Numeric(asdecimal=False))
+    tempo: float = db.Column(db.Numeric(asdecimal=False))
+    time_signature: float = db.Column(db.Numeric(asdecimal=False))
+    valence: float = db.Column(db.Numeric(asdecimal=False))
+
     created_date: datetime = db.Column(db.DateTime, nullable=False)
     modified_date: datetime = db.Column(db.DateTime, nullable=False)
 
