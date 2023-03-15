@@ -6,6 +6,7 @@ import datetime
 import re
 
 import spotipy
+from spotipy.exceptions import SpotifyException
 import tqdm
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import IntegrityError
@@ -13,6 +14,23 @@ from sqlalchemy.exc import IntegrityError
 from src.server import create_app
 from src.server.extensions import db
 from src.models.models import Streams, Tracks, Albums, Artists, Genres, OldTrackUris
+
+
+def sort_stream_uris(json_file_path: str) -> None:
+    with open(file=json_file_path, mode="r", encoding="UTF-8") as json_file:
+        try:
+            json_data: list = json.load(fp=json_file)
+        except ValueError:
+            print(f"{json_file_path} is not a valid JSON file")
+            return
+
+    # Remove stream records with no URIs
+    json_data = list(filter(lambda x: x["spotify_track_uri"] is not None, json_data))
+    # Sort stream records by URI
+    json_data = sorted(json_data, key=lambda x: x["spotify_track_uri"])
+
+    with open(file=json_file_path, mode="w", encoding="UTF-8") as json_file:
+        json.dump(json_data, json_file)
 
 
 def aggregate_json_files(input_path: str, output_file: str) -> None:
@@ -56,8 +74,11 @@ def parse_release_date(
         return datetime.datetime.now()
 
 
-def create_artist(artist_uri: str, sp: spotipy.Spotify) -> Artists:
-    artist_data = sp.artist(artist_uri)
+def create_artist(artist_uri: str, sp: spotipy.Spotify) -> Artists | None:
+    try:
+        artist_data = sp.artist(artist_uri)
+    except SpotifyException:
+        return None
 
     artist = Artists(
         uri=artist_data["uri"],
@@ -86,8 +107,11 @@ def create_artist(artist_uri: str, sp: spotipy.Spotify) -> Artists:
     return artist
 
 
-def create_album(album_uri: str, sp: spotipy.Spotify) -> Albums:
-    album_data = sp.album(album_uri, market="JP")
+def create_album(album_uri: str, sp: spotipy.Spotify) -> Albums | None:
+    try:
+        album_data = sp.album(album_uri, market="JP")
+    except SpotifyException:
+        return None
 
     album = Albums(
         uri=album_data["uri"],
@@ -114,6 +138,8 @@ def create_album(album_uri: str, sp: spotipy.Spotify) -> Albums:
 
         if album_artist is None:
             album_artist = create_artist(album_data_artist["uri"], sp)
+            if album_artist is None:
+                return None
 
         album_artist.albums.append(album)
         db.session.add(album_artist)
@@ -124,8 +150,11 @@ def create_album(album_uri: str, sp: spotipy.Spotify) -> Albums:
     return album
 
 
-def create_track(stream_record_uri: str, sp: spotipy.Spotify) -> Tracks:
-    track_data = sp.track(stream_record_uri, market="JP")
+def create_track(stream_record_uri: str, sp: spotipy.Spotify) -> Tracks | None:
+    try:
+        track_data = sp.track(stream_record_uri, market="JP")
+    except SpotifyException:
+        return None
 
     track = db.session.query(Tracks).filter(Tracks.uri == track_data["uri"]).first()
 
@@ -145,6 +174,8 @@ def create_track(stream_record_uri: str, sp: spotipy.Spotify) -> Tracks:
 
     if album is None:
         album = create_album(track_data["album"]["uri"], sp)
+        if album is None:
+            return None
 
     track = Tracks(
         uri=track_data["uri"],
@@ -169,6 +200,8 @@ def create_track(stream_record_uri: str, sp: spotipy.Spotify) -> Tracks:
 
         if track_artist is None:
             track_artist = create_artist(track_data_artist["uri"], sp)
+            if track_artist is None:
+                return None
 
         track_artist.tracks.append(track)
         db.session.add(track_artist)
@@ -226,7 +259,7 @@ def create_stream(stream_record: dict, track: Tracks) -> None:
         db.session.rollback()
 
 
-def process_stream_record(stream_record: dict, sp: spotipy.Spotify) -> None:
+def process_stream_record(stream_record: dict, sp: spotipy.Spotify) -> bool:
     track = (
         db.session.query(Tracks)
         .filter(Tracks.uri == stream_record["spotify_track_uri"])
@@ -242,21 +275,28 @@ def process_stream_record(stream_record: dict, sp: spotipy.Spotify) -> None:
 
         if old_track_uri is None:
             track = create_track(stream_record["spotify_track_uri"], sp)
+            if track is None:
+                return False
         else:
             track = old_track_uri.track
 
     create_stream(stream_record, track)
+    return True
 
 
 def process_all_streams(
     json_file_path: str, client_id: str, client_secret: str
 ) -> None:
+    """
+    auth_manager = spotipy.oauth2.SpotifyClientCredentials(
+        client_id=client_id, client_secret=client_secret
+    )
+    """
     auth_manager = spotipy.oauth2.SpotifyOAuth(
         client_id=client_id,
         client_secret=client_secret,
         redirect_uri="http://example.com/",
     )
-
     sp = spotipy.Spotify(auth_manager=auth_manager, language="ja")
 
     with open(file=json_file_path, mode="r", encoding="UTF-8") as json_file:
@@ -271,7 +311,8 @@ def process_all_streams(
             if stream_record["spotify_track_uri"] is None:
                 continue
 
-            process_stream_record(stream_record, sp)
+            if not process_stream_record(stream_record, sp):
+                print("Error")
 
 
 if __name__ == "__main__":
@@ -288,6 +329,7 @@ if __name__ == "__main__":
     CLIENT_SECRET = CLIENT_SECRET.rstrip()
 
     aggregate_json_files(INPUT_PATH, OUTPUT_FILE)
+    sort_stream_uris(OUTPUT_FILE)
 
     app = create_app()
     with app.app_context():
