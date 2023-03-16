@@ -62,7 +62,7 @@ class Tracks(db.Model):
     old_uris = db.relationship("OldTrackUris", back_populates="track")
 
     # Many to one relationship to albums
-    album_id = db.Column(db.Integer, db.ForeignKey("albums.id"), nullable=False)
+    album_id = db.Column(db.Integer, db.ForeignKey("albums.id"))
     album = db.relationship("Albums", back_populates="tracks")
 
     # Many to many relationship with artists using artists_tracks association table
