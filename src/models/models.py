@@ -24,7 +24,7 @@ class OldTrackUris(db.Model):
 
 class Streams(db.Model):
     __tablename__: str = "streams"
-    __table_args__ = (db.UniqueConstraint("stream_date", "track_id"),)
+    __table_args__ = (db.UniqueConstraint("stream_date", "track_id", "album_id", "ms_played"),)
 
     id: int = db.Column(db.Integer, primary_key=True, autoincrement=True)
 

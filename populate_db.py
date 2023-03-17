@@ -349,18 +349,6 @@ def get_track_data(
     tracks_data: list[dict] = sp.tracks(track_uris, market="JP")
 
     for i, track_data in enumerate(tracks_data["tracks"]):
-        # Attempt to get track from database by current track_data uri
-        track = db_get_track(track_data["uri"])
-        if track is not None:
-            # If the track does exist after calling the API,
-            # add the original track_uri from the stream
-            # to the mapping table to the actual track_item in the database and skip track data
-            old_track_uri = OldTrackUris(old_uri=track_uris[i], track_id=track.id)
-
-            db.session.add(old_track_uri)
-            db.session.commit()
-            continue
-
         # Attempt to get album from database by current track_data album uri
         album = db_get_album(track_data["album"]["uri"])
         # Create a track with track_data, its relationship to its album
@@ -371,6 +359,17 @@ def get_track_data(
             # since relationship has already been set and the album_uri does not need
             # to be set in the data_cache
             continue
+        
+        # Attempt to get track from database by current track_data uri
+        track = db_get_track(track_data["uri"])
+        if track is not None:
+            # If the track does exist after calling the API,
+            # add the original track_uri from the stream
+            # to the mapping table to the actual track_item in the database and skip track data
+            old_track_uri = OldTrackUris(old_uri=track_uris[i], track_id=track.id)
+
+            db.session.add(old_track_uri)
+            db.session.commit()
 
         if track_data["album"]["uri"] not in data_cache["albums"]:
             data_cache["albums"][track_data["album"]["uri"]] = set()
@@ -430,7 +429,7 @@ def create_streams(input_path: str) -> None:
     if not os.path.exists(path=input_path):
         sys.exit(f"input_path {input_path} does not exist")
 
-    print("Creating Streams")
+    print("\nCreating Streams")
     for file_path in tqdm.tqdm(glob.glob(pathname=input_path + "*.json")):
         with open(file=file_path, mode="r", encoding="UTF-8") as json_file:
             try:
