@@ -7,11 +7,21 @@ api = Namespace(
     name="streams", description="Individual records of a track being played"
 )
 
-streams_marshal = api.model(
+streams_model = api.model(
     name="Streams",
     model={
         "id": fields.Integer(
             required=True, attribute="id", description="the id of stream"
+        ),
+        "track_id": fields.Integer(
+            required=True,
+            attribute="track_id",
+            description="the id of track that was streamed",
+        ),
+        "album_id": fields.Integer(
+            required=True,
+            attribute="album_id",
+            description="the id of album that was streamed",
         ),
         "stream_date": fields.DateTime(
             required=True,
@@ -22,6 +32,11 @@ streams_marshal = api.model(
             required=True,
             attribute="ms_played",
             description="The amount of time a track was streamed for in milliseconds",
+        ),
+        "ratio_played": fields.Float(
+            required=True,
+            attribute="ratio_played",
+            description="The ratio of how much a track was streamed for 0.0 -> 1.0",
         ),
         "reason_start": fields.String(
             required=True,
@@ -38,33 +53,30 @@ streams_marshal = api.model(
             attribute="shuffle",
             description="If shuffle mode was used when streaming the track",
         ),
-        "skipped": fields.String(
+        "created_date": fields.DateTime(
             required=True,
-            attribute="skipped",
-            description="If the user skipped to the next song",
+            attribute="created_date",
+            description="The datetime when this track track object was created in UTC",
+        ),
+        "modified_date": fields.DateTime(
+            required=True,
+            attribute="modified_date",
+            description="The datetime when this track object was last modified in UTC",
         ),
     },
 )
 
 
 @api.route("/")
+class StreamsListResource(Resource):
+    @api.doc("test doc decoration")
+    @api.marshal_with(streams_model, as_list=True)
+    def get(self):
+        return db.session.query(Streams).limit(5).all()
+
+@api.route("/<int:stream_id>")
 class StreamsResource(Resource):
     @api.doc("test doc decoration")
-    @api.marshal_with(streams_marshal, as_list=True)
+    @api.marshal_with(streams_model)
     def get(self):
-        return db.session.query(Streams).all()
-
-    @api.doc("create field")
-    @api.marshal_with(streams_marshal)
-    def post(self):
-        stream = Streams(
-            stream_date=datetime.datetime.now(),
-            ms_played=1000,
-            reason_start="start reason",
-            reason_end="end reasonnnn",
-            shuffle=False,
-            skipped="maybe???",
-        )
-        db.session.add(stream)
-        db.session.commit()
-        return stream
+        return db.session.query(Streams).first()
