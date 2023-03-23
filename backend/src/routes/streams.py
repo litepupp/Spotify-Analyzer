@@ -1,7 +1,6 @@
 from flask_restx import Namespace, Resource, fields
 from src.server.extensions import db
 from src.models.models import Streams
-import datetime
 
 api = Namespace(
     name="streams", description="Individual records of a track being played"
@@ -66,17 +65,43 @@ streams_model = api.model(
     },
 )
 
+streams_page_model = api.model(
+    name="StreamsPage",
+    model={
+        "page": fields.Integer(
+            required=True,
+            attribute="page",
+            description="The current page this list of streams map to",
+        ),
+        "per_page": fields.Integer(
+            required=True,
+            attribute="per_page",
+            description="The number of streams returned in this page",
+        ),
+        "items": fields.List(fields.Nested(streams_model)),
+        "total": fields.Integer(
+            required=True,
+            attribute="total",
+            description="The total number of streams that exist",
+        ),
+    },
+)
+
 
 @api.route("/")
 class StreamsListResource(Resource):
-    @api.doc("test doc decoration")
-    @api.marshal_with(streams_model, as_list=True)
+    @api.marshal_with(streams_page_model)
     def get(self):
-        return db.session.query(Streams).limit(5).all()
+        return db.paginate(db.session.query(Streams), per_page=1000)
+
 
 @api.route("/<int:stream_id>")
+@api.param(name="stream_id", description="The id of a stream object")
 class StreamsResource(Resource):
-    @api.doc("test doc decoration")
     @api.marshal_with(streams_model)
-    def get(self):
-        return db.session.query(Streams).first()
+    def get(self, stream_id):
+        stream = db.session.query(Streams).filter(Streams.id == stream_id).first()
+        if stream:
+            return stream
+        else:
+            return 404
