@@ -1,23 +1,58 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { AgGridReact } from "ag-grid-react";
-import axios from "axios";
+import { AxiosResponse } from "axios";
 
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
+import { Streams, StreamsPage } from "./models/streams.model";
+import { getStreamsPaginated } from "./services/streams.service";
 
 const App = () => {
-  const [rowData, setRowData] = useState();
+  const [streamData, setStreamData] = useState<Streams[]>([]);
+  const [totalTime, setTotalTime] = useState<number>(0);
 
-  const [columnDefs, setColumnDefs] = useState([
+  const [columnDefs] = useState([
     { headerName: "Stream ID", field: "id", filter: "agNumberColumnFilter" },
-    { field: "track_id", filter: "agNumberColumnFilter" },
-    { field: "album_id", filter: "agNumberColumnFilter" },
-    { field: "stream_date", filter: "agDateColumnFilter" },
-    { field: "ms_played", filter: "agNumberColumnFilter" },
-    { field: "ratio_played", filter: "agNumberColumnFilter" },
-    { field: "reason_start", filter: "agTextColumnFilter" },
-    { field: "reason_end", filter: "agTextColumnFilter" },
-    { field: "shuffle", filter: "agTextColumnFilter" },
+    {
+      headerName: "Track ID",
+      field: "track_id",
+      filter: "agNumberColumnFilter",
+    },
+    {
+      headerName: "Album ID",
+      field: "album_id",
+      filter: "agNumberColumnFilter",
+    },
+    {
+      headerName: "Stream ID",
+      field: "stream_date",
+      filter: "agDateColumnFilter",
+    },
+    {
+      headerName: "Time played (ms)",
+      field: "ms_played",
+      filter: "agNumberColumnFilter",
+    },
+    {
+      headerName: "Completion rate",
+      field: "ratio_played",
+      filter: "agNumberColumnFilter",
+    },
+    {
+      headerName: "Starting Reason",
+      field: "reason_start",
+      filter: "agTextColumnFilter",
+    },
+    {
+      headerName: "Ending Reason",
+      field: "reason_end",
+      filter: "agTextColumnFilter",
+    },
+    {
+      headerName: "Was Shuffled",
+      field: "shuffle",
+      filter: "agTextColumnFilter",
+    },
   ]);
 
   const defaultColDef = useMemo(
@@ -29,20 +64,33 @@ const App = () => {
   );
 
   useEffect(() => {
-    axios.get("http://127.0.0.1:5000/api/streams/").then((response) => {
-      setRowData(response.data.items);
+    getStreamsPaginated().then(({ data }: AxiosResponse<StreamsPage>) => {
+      setTotalTime(
+        data.items.reduce((acc: number, { ms_played }) => acc + ms_played, 0)
+      );
+      setStreamData(
+        data.items.map(
+          ({ stream_date, created_date, modified_date, ...stream }) => ({
+            ...stream,
+            stream_date: new Date(stream_date + "Z"),
+            created_date: new Date(created_date + "Z"),
+            modified_date: new Date(modified_date + "Z"),
+          })
+        )
+      );
     });
   }, []);
 
   return (
     <div>
       <div className="ag-theme-alpine" style={{ width: 1000, height: 600 }}>
+        <div>Total ms_played = {totalTime}</div>
         <AgGridReact
-          rowData={rowData} // Row Data for Rows
-          columnDefs={columnDefs} // Column Defs for Columns
-          animateRows={true} // Optional - set to 'true' to have rows animate when sorted
+          rowData={streamData}
+          columnDefs={columnDefs}
+          animateRows={true}
           defaultColDef={defaultColDef}
-          rowSelection="multiple" // Options - allows click selection of rows
+          rowSelection="multiple"
         />
       </div>
     </div>
