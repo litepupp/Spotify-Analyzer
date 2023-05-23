@@ -5,7 +5,8 @@ import { AxiosResponse } from "axios";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import { Streams, StreamsPage } from "./models/streams.model";
-import { getStreamsPaginated } from "./services/streams.service";
+import { StreamsService } from "./services/streams.service";
+import { ValueFormatterParams } from "ag-grid-community";
 
 const App = () => {
   const [streamData, setStreamData] = useState<Streams[]>([]);
@@ -24,9 +25,18 @@ const App = () => {
       filter: "agNumberColumnFilter",
     },
     {
-      headerName: "Stream ID",
+      headerName: "Date Streamed",
       field: "stream_date",
       filter: "agDateColumnFilter",
+      valueFormatter: (params: ValueFormatterParams<Streams, Date>) =>
+        params.value.toLocaleDateString("ja-JP", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          weekday: "long",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
     },
     {
       headerName: "Time played (ms)",
@@ -64,21 +74,23 @@ const App = () => {
   );
 
   useEffect(() => {
-    getStreamsPaginated().then(({ data }: AxiosResponse<StreamsPage>) => {
-      setTotalTime(
-        data.items.reduce((acc: number, { ms_played }) => acc + ms_played, 0)
-      );
-      setStreamData(
-        data.items.map(
-          ({ stream_date, created_date, modified_date, ...stream }) => ({
-            ...stream,
-            stream_date: new Date(stream_date + "Z"),
-            created_date: new Date(created_date + "Z"),
-            modified_date: new Date(modified_date + "Z"),
-          })
-        )
-      );
-    });
+    StreamsService.getStreamsPaginated().then(
+      ({ data }: AxiosResponse<StreamsPage>) => {
+        setTotalTime(
+          data.items.reduce((acc: number, { ms_played }) => acc + ms_played, 0)
+        );
+        setStreamData(
+          data.items.map(
+            ({ stream_date, created_date, modified_date, ...stream }) => ({
+              ...stream,
+              stream_date: new Date(stream_date + "Z"),
+              created_date: new Date(created_date + "Z"),
+              modified_date: new Date(modified_date + "Z"),
+            })
+          )
+        );
+      }
+    );
   }, []);
 
   return (

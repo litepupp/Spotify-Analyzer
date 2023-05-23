@@ -103,5 +103,5 @@ class StreamsResource(Resource):
         stream = db.session.query(Streams).filter(Streams.id == stream_id).first()
         if stream:
             return stream
-        else:
-            return 404
+
+        return 404
