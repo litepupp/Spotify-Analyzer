@@ -86,8 +86,8 @@ def db_get_track(track_uri: str) -> Tracks | None:
 
         if old_track_uri is None:
             return None
-        else:
-            return old_track_uri.track
+
+        return old_track_uri.track
 
     return track
 
@@ -359,7 +359,7 @@ def get_track_data(
             # since relationship has already been set and the album_uri does not need
             # to be set in the data_cache
             continue
-        
+
         # Attempt to get track from database by current track_data uri
         track = db_get_track(track_data["uri"])
         if track is not None:

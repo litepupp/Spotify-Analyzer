@@ -5,7 +5,7 @@ from .extensions import db, migrate
 from .config import Config
 
 
-def create_app(config: Config = Config) -> Flask:
+def create_app(config=Config) -> Flask:
     app: Flask = Flask(import_name=__name__)
 
     app.config.from_object(obj=config)
