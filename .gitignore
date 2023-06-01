@@ -1,5 +1,6 @@
 data
 auth.txt
+.cache
 instance
 temp
 migrations
