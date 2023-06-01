@@ -1,0 +1,4 @@
+-- CreateTable
+CREATE TABLE "Stream" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);

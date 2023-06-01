@@ -2,7 +2,6 @@ data
 auth.txt
 instance
 temp
-migrations
 
 .DS_Store
 .env
