@@ -11,5 +11,6 @@ datasource db {
 }
 
 model Stream {
-  id Int @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
+  stream_date DateTime
 }
