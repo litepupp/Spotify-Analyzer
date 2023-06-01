@@ -11,6 +11,96 @@ datasource db {
 }
 
 model Stream {
-  id          Int      @id @default(autoincrement())
-  stream_date DateTime
+  id           Int      @id @default(autoincrement())
+  track        Track    @relation(fields: [trackId], references: [id])
+  trackId      Int
+  album        Album    @relation(fields: [albumId], references: [id])
+  albumId      Int
+  artists      Artist[]
+  streamDate   DateTime
+  reasonStart  String
+  reasonEnd    String
+  msPlayed     Int
+  ratioPlayed  Float
+  shuffle      Boolean
+  createdDate  DateTime
+  modifiedDate DateTime @updatedAt
+
+  @@map("streams")
+}
+
+model Track {
+  id               Int      @id @default(autoincrement())
+  uri              String   @unique
+  streams          Stream[]
+  album            Album    @relation(fields: [albumId], references: [id])
+  albumId          Int
+  artists          Artist[]
+  name             String
+  duration         Int
+  popularity       Int
+  explicit         Boolean
+  discNumber       Int
+  trackNumber      Int
+  previewUrl       String
+  acousticness     Float
+  danceability     Float
+  energy           Float
+  instrumentalness Float
+  key              Float
+  liveness         Float
+  loudness         Float
+  mode             Float
+  speechiness      Float
+  tempo            Float
+  timeSignature    Float
+  valence          Float
+  createdDate      DateTime
+  modifiedDate     DateTime @updatedAt
+
+  @@map("tracks")
+}
+
+model Album {
+  id           Int      @id @default(autoincrement())
+  uri          String   @unique
+  streams      Stream[]
+  tracks       Track[]
+  artists      Artist[]
+  name         String
+  type         String
+  totalTracks  Int
+  label        String
+  popularity   Int
+  releaseDate  DateTime
+  imageUrl     String
+  createdDate  DateTime
+  modifiedDate DateTime @updatedAt
+
+  @@map("albums")
+}
+
+model Artist {
+  id           Int      @id @default(autoincrement())
+  uri          String   @unique
+  streams      Stream[]
+  tracks       Track[]
+  albums       Album[]
+  genres       Genre[]
+  name         String
+  followers    Int
+  popularity   Int
+  imageUrl     String
+  createdDate  DateTime
+  modifiedDate DateTime @updatedAt
+
+  @@map("artists")
+}
+
+model Genre {
+  id      Int      @id @default(autoincrement())
+  name    String   @unique
+  artists Artist[]
+
+  @@map("genres")
 }

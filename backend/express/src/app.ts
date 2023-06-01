@@ -1,4 +1,4 @@
-import { PrismaClient, Stream } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import express from "express";
 
 const app = express();
@@ -7,10 +7,10 @@ const port = 3000;
 const prisma = new PrismaClient();
 
 app.get("/", (req, res) => {
-  prisma.stream
+  prisma.artist
     .findMany()
-    .then((streams) => {
-      res.json(streams);
+    .then((artist) => {
+      res.json(artist);
     })
     .finally(() => {});
 });
