@@ -9,7 +9,6 @@ import datetime
 
 import tqdm
 import spotipy
-from sqlalchemy.exc import IntegrityError
 
 from src.server import create_app
 from src.server.extensions import db
@@ -37,32 +36,35 @@ def create_spotify_client(auth_file_path: str) -> spotipy.Spotify:
     return client
 
 
-def get_unique_track_uris(input_path: str) -> list[str]:
+def load_stream_objects(input_path: str) -> tuple[list[str], list[dict]]:
     """
     ...
     """
 
-    unique_track_uris: set[str] = set()
-
-    if not os.path.exists(path=input_path):
+    if not os.path.exists(input_path):
         sys.exit(f"input_path {input_path} does not exist")
 
+    unique_track_uris: set[str] = set()
+    stream_objects: list[dict] = []
+
     print("Getting unique track URIs")
-    for file_path in tqdm.tqdm(glob.glob(pathname=input_path + "*.json")):
-        with open(file=file_path, mode="r", encoding="UTF-8") as json_file:
+    for file_path in tqdm.tqdm(glob.glob(input_path + "*.json")):
+        with open(file_path, "r", encoding="UTF-8") as json_file:
             try:
-                json_data: list[dict] = json.load(fp=json_file)
+                json_data: list[dict] = json.load(json_file)
             except ValueError:
                 print(f"{file_path} is not a valid JSON file")
                 continue
 
+            stream_objects.extend(json_data)
+
             unique_track_uris.update(
                 stream_object["spotify_track_uri"]
                 for stream_object in json_data
-                if stream_object["spotify_track_uri"] is not None
+                if stream_object.get("spotify_track_uri")
             )
 
-    return list(unique_track_uris)
+    return list(unique_track_uris), stream_objects
 
 
 def parse_release_date(
@@ -132,53 +134,6 @@ def db_get_artist(artist_uri: str) -> Artists | None:
     )
 
     return artist
-
-
-def db_create_stream(stream_record: dict, track: Tracks) -> None:
-    """
-    ...
-    """
-
-    ratio_played = 0.0
-    if track.duration_ms > 0:
-        ratio_played = min(stream_record["ms_played"] / track.duration_ms, 1.0)
-
-    stream = Streams(
-        track_id=track.id,
-        album_id=track.album_id,
-        stream_date=datetime.datetime.strptime(
-            stream_record["ts"], "%Y-%m-%dT%H:%M:%SZ"
-        ),
-        ms_played=stream_record["ms_played"],
-        ratio_played=ratio_played,
-        reason_start=stream_record["reason_start"],
-        reason_end=stream_record["reason_end"],
-        shuffle=stream_record["shuffle"],
-        created_date=datetime.datetime.now(datetime.timezone.utc),
-        modified_date=datetime.datetime.now(datetime.timezone.utc),
-    )
-
-    try:
-        db.session.add(stream)
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-
-    for track_artist in track.artists:
-        track_artist.streams.append(stream)
-        try:
-            db.session.add(track_artist)
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-
-    for album_artist in track.album.artists:
-        album_artist.streams.append(stream)
-        try:
-            db.session.add(album_artist)
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
 
 
 def db_create_artist(artist_data: dict) -> Artists:
@@ -457,30 +412,63 @@ def process_track_uris(
         data_cache["artists"].clear()
 
 
-def create_streams(input_path: str) -> None:
+def create_streams(stream_objects: list[dict]) -> None:
     """
     ...
     """
 
-    if not os.path.exists(path=input_path):
-        sys.exit(f"input_path {input_path} does not exist")
+    streams: list[Streams] = []
 
     print("\nCreating Streams")
-    for file_path in tqdm.tqdm(glob.glob(pathname=input_path + "*.json")):
-        with open(file=file_path, mode="r", encoding="UTF-8") as json_file:
-            try:
-                json_data: list[dict] = json.load(fp=json_file)
-            except ValueError:
-                print(f"{file_path} is not a valid JSON file")
+    for stream_object in tqdm.tqdm(stream_objects):
+        if stream_object["spotify_track_uri"] is not None:
+            track = db_get_track(stream_object["spotify_track_uri"])
+            if track is None:
                 continue
 
-            for stream_object in tqdm.tqdm(json_data, leave=False):
-                if stream_object["spotify_track_uri"] is not None:
-                    track = db_get_track(stream_object["spotify_track_uri"])
-                    db_create_stream(stream_object, track)
+            streams.append(
+                Streams(
+                    track_id=track.id,
+                    album_id=track.album_id,
+                    stream_date=datetime.datetime.strptime(
+                        stream_object["ts"], "%Y-%m-%dT%H:%M:%SZ"
+                    ),
+                    ms_played=stream_object["ms_played"],
+                    ratio_played=min(
+                        stream_object["ms_played"] / track.duration_ms, 1.0
+                    )
+                    if track.duration_ms > 0
+                    else 0.0,
+                    reason_start=stream_object["reason_start"],
+                    reason_end=stream_object["reason_end"],
+                    shuffle=stream_object["shuffle"],
+                    created_date=datetime.datetime.now(datetime.timezone.utc),
+                    modified_date=datetime.datetime.now(datetime.timezone.utc),
+                )
+            )
+
+    # Batch insertion of streams
+    print("Saving...", end="")
+    db.session.bulk_save_objects(streams)
+    db.session.commit()
+    print("DONE!")
+
+    print("\nLinking Streams")
+    for stream in tqdm.tqdm(streams):
+        for track_artist in stream.track.artists:
+            track_artist.streams.append(stream)
+
+        for album_artist in stream.album.artists:
+            album_artist.streams.append(stream)
+
+    db.session.commit()
 
 
 def get_track_features(sp_client: spotipy.Spotify) -> None:
+    """
+    ...
+    """
+
     tracks = db.session.query(Tracks).all()
     track_uris = [track.uri for track in tracks]
 
@@ -521,14 +509,14 @@ def main() -> None:
     """
 
     # Path holding all endsong.json files
-    INPUT_PATH = "./data/input/"
+    json_file_path = "./data/input/"
     # Path to file that contains client_id / client_secret
-    AUTH_FILE_PATH = "./auth.txt"
+    auth_file_path = "./auth.txt"
 
-    # Create new spotipy client using credentials in AUTH_FILE_PATH
-    sp_client: spotipy.Spotify = create_spotify_client(AUTH_FILE_PATH)
-    # Get list of all unique track_uris in streams data
-    unique_track_uris: list[str] = get_unique_track_uris(INPUT_PATH)
+    # Create new spotipy client using credentials in auth_file_path
+    sp_client: spotipy.Spotify = create_spotify_client(auth_file_path)
+    # Get list of all unique track_uris in streams data and streams objects themselves
+    unique_track_uris, stream_objects = load_stream_objects(json_file_path)
 
     # Create cache for album and artist uris ...
     data_cache: dict = {"albums": {}, "artists": {}}
@@ -539,7 +527,7 @@ def main() -> None:
         # Begin processing all unique track_uris from streams
         process_track_uris(unique_track_uris, sp_client, data_cache)
         get_track_features(sp_client)
-        # create_streams(INPUT_PATH)
+        create_streams(stream_objects)
 
 
 if __name__ == "__main__":
