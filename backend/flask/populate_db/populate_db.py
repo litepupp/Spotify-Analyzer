@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Script that ingests data from Spotify endsong.json files"""
 
 import glob
 import json
@@ -12,7 +11,7 @@ import spotipy
 
 from src.server import create_app
 from src.server.extensions import db
-from src.models.models import Streams, Tracks, Albums, Artists, Genres, OldTrackUris
+from src.models.models import Streams, Tracks, Albums, Artists, Genres, TrackUris
 
 
 def create_spotify_client(auth_file_path: str) -> spotipy.Spotify:
@@ -36,7 +35,7 @@ def create_spotify_client(auth_file_path: str) -> spotipy.Spotify:
     return client
 
 
-def load_stream_objects(input_path: str) -> tuple[list[str], list[dict]]:
+def load_stream_objects(input_path: str) -> tuple[set[str], list[dict]]:
     """
     ...
     """
@@ -47,7 +46,7 @@ def load_stream_objects(input_path: str) -> tuple[list[str], list[dict]]:
     unique_track_uris: set[str] = set()
     stream_objects: list[dict] = []
 
-    print("Getting unique track URIs")
+    print("Getting unique track URIs and Stream objects")
     for file_path in tqdm.tqdm(glob.glob(input_path + "*.json")):
         with open(file_path, "r", encoding="UTF-8") as json_file:
             try:
@@ -61,10 +60,10 @@ def load_stream_objects(input_path: str) -> tuple[list[str], list[dict]]:
             unique_track_uris.update(
                 stream_object["spotify_track_uri"]
                 for stream_object in json_data
-                if stream_object.get("spotify_track_uri")
+                if stream_object["spotify_track_uri"] is not None
             )
 
-    return list(unique_track_uris), stream_objects
+    return unique_track_uris, stream_objects
 
 
 def parse_release_date(
@@ -88,26 +87,21 @@ def parse_release_date(
         return datetime.datetime.now()
 
 
-def db_get_track(track_uri: str) -> Tracks | None:
+def db_get_tracks(track_uris: list[str]) -> list[Tracks] | None:
     """
     ...
     """
 
-    track: Tracks | None = (
-        db.session.query(Tracks).filter(Tracks.uri == track_uri).first()
-    )
+    track = db.session.query(Tracks).filter(Tracks.uri.in_(track_uris)).all()
 
-    if track is None:
-        old_track_uri: OldTrackUris | None = (
-            db.session.query(OldTrackUris)
+    if tracks is None:
+        old_track_uri = (
+            db.session.query(OldTrackUris.track)
             .filter(OldTrackUris.old_uri == track_uri)
             .first()
         )
 
-        if old_track_uri is None:
-            return None
-
-        return old_track_uri.track
+        return old_track_uri.track if old_track_uri else None
 
     return track
 
@@ -304,13 +298,13 @@ def get_artist_data(data_cache: dict, sp_client: spotipy.Spotify) -> None:
 
 
 def get_album_data(
-    album_uris: list[str], sp_client: spotipy.Spotify, data_cache: dict
+    album_uri_batch: list[str], sp_client: spotipy.Spotify, data_cache: dict
 ) -> None:
     """
     ...
     """
 
-    albums_data = sp_client.albums(album_uris, market="JP")
+    albums_data = sp_client.albums(album_uri_batch, market="JP")
     if albums_data is None:
         return
 
@@ -320,63 +314,82 @@ def get_album_data(
         for track_uri in list(data_cache["albums"][album_data["uri"]]):
             track = db_get_track(track_uri)
             album.tracks.append(track)
-            db.session.add(track)
 
         db.session.commit()
 
 
 def get_track_data(
-    track_uris: list[str], sp_client: spotipy.Spotify, data_cache: dict
+    old_track_uris: list[str], sp_client: spotipy.Spotify, data_cache: dict
 ) -> None:
     """
     ...
     """
 
     # List of 50 track objects returned by spotify API
-    tracks_data = sp_client.tracks(track_uris, market="JP")
+    tracks_data = sp_client.tracks(old_track_uris, market="JP")
     if tracks_data is None:
         return
 
-    for i, track_data in enumerate(tracks_data["tracks"]):
-        # Attempt to get album from database by using the current track_datas -> album uri
-        album = db_get_album(track_data["album"]["uri"])
+    unique_tracks_data = list(
+        {
+            track_data.uri: track_data
+            for old_track_uri, track_data in zip(old_track_uris, tracks_data)
+        }.values()
+    )
 
-        # Create a track with track_data, its relationship to its album
-        # is set if an album actually exists for its album_uri
-        db_create_track(track_data, album, sp_client, data_cache)
-        if album is not None:
-            # If album was actually found in db, continue to next track_data
-            # since relationship has already been set and the album_uri does not need
-            # to be set in the data_cache
-            continue
+    """
+    track_uri = track_data["uri"]
+    track = db_get_track(track_uri)
+    if track is not None:
+        db.session.add(OldTrackUris(old_uri=track_uri_batch[i], track_id=track.id))
+        db.session.commit()
+        continue
 
-        # Attempt to get track from database by current track_data uri
-        track = db_get_track(track_data["uri"])
-        if track is not None:
-            # If the track does exist after calling the API,
-            # add the original track_uri from the stream
-            # to the mapping table to the actual track_item in the database and skip track data
-            old_track_uri = OldTrackUris(old_uri=track_uris[i], track_id=track.id)
+    album_uri = track_data["album"]["uri"]
+    album = db_get_album(album_uri)
+    db_create_track(track_data, album, sp_client, data_cache)
+    if album is not None:
+        continue
 
-            db.session.add(old_track_uri)
-            db.session.commit()
+    if album_uri not in data_cache["albums"]:
+        data_cache["albums"][album_uri] = set()
 
-        if track_data["album"]["uri"] not in data_cache["albums"]:
-            data_cache["albums"][track_data["album"]["uri"]] = set()
-
-        data_cache["albums"][track_data["album"]["uri"]].add(track_data["uri"])
-        if len(data_cache["albums"].keys()) == 20:
-            get_album_data(list(data_cache["albums"].keys()), sp_client, data_cache)
-            data_cache["albums"].clear()
+    data_cache["albums"][album_uri].add(track_uri)
+    if len(data_cache["albums"].keys()) == 20:
+        get_album_data(list(data_cache["albums"].keys()), sp_client, data_cache)
+        data_cache["albums"].clear()
+    """
 
 
-def process_track_uris(
-    track_uris: list[str], sp_client: spotipy.Spotify, data_cache: dict
+def process_unique_track_uris(
+    unique_track_uris: set[str], sp_client: spotipy.Spotify, data_cache: dict
 ) -> None:
     """
     ...
     """
+    # Spotify limit for bulk track requests
+    batch_size = 50
 
+    # Get all track_uris in Tracks table that match URIs in unique_track_uris set
+    current_unique_track_uris: set[str] = {
+        uri
+        for (uri,) in db.session.query(TrackUris.uri)
+        .filter(TrackUris.uri.in_(unique_track_uris))
+        .all()
+    }
+
+    # Remove the matching URIs from the unique_track_uris set
+    new_track_uris = list(unique_track_uris - current_unique_track_uris)
+
+    print(f"unique_track_uris: {len(unique_track_uris)}")
+    print(f"current_unique_track_uris: {len(current_unique_track_uris)}")
+    print(f"new_track_uris: {len(new_track_uris)}")
+
+    print("\nProcessing track URIs")
+    for pos in tqdm.tqdm(range(0, len(new_track_uris), batch_size)):
+        get_track_data(new_track_uris[pos : pos + batch_size], sp_client, data_cache)
+
+    """
     # List for storing batches of 50 track_uris for the spotify API
     track_uri_batch: list[str] = []
 
@@ -410,6 +423,7 @@ def process_track_uris(
     if data_cache["artists"]:
         get_artist_data(data_cache, sp_client)
         data_cache["artists"].clear()
+    """
 
 
 def create_streams(stream_objects: list[dict]) -> None:
@@ -514,7 +528,7 @@ def main() -> None:
     auth_file_path = "./auth.txt"
 
     # Create new spotipy client using credentials in auth_file_path
-    sp_client: spotipy.Spotify = create_spotify_client(auth_file_path)
+    sp_client = create_spotify_client(auth_file_path)
     # Get list of all unique track_uris in streams data and streams objects themselves
     unique_track_uris, stream_objects = load_stream_objects(json_file_path)
 
@@ -525,9 +539,9 @@ def main() -> None:
     app = create_app()
     with app.app_context():
         # Begin processing all unique track_uris from streams
-        process_track_uris(unique_track_uris, sp_client, data_cache)
-        get_track_features(sp_client)
-        create_streams(stream_objects)
+        process_unique_track_uris(unique_track_uris, sp_client, data_cache)
+        # get_track_features(sp_client)
+        # create_streams(stream_objects)
 
 
 if __name__ == "__main__":

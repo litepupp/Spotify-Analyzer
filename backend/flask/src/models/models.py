@@ -10,16 +10,16 @@ from src.models.associations import (
 )
 
 
-class OldTrackUris(db.Model):
-    __tablename__: str = "old_track_uris"
-    __table_args__ = (db.UniqueConstraint("old_uri", "track_id"),)
+class TrackUris(db.Model):
+    __tablename__: str = "track_uris"
+    __table_args__ = (db.UniqueConstraint("uri", "track_id"),)
 
     id: int = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    old_uri: str = db.Column(db.String, nullable=False)
+    uri = db.Column(db.String, nullable=False)
 
     # Many to one relationship to tracks
     track_id = db.Column(db.Integer, db.ForeignKey("tracks.id"), nullable=False)
-    track = db.relationship("Tracks", back_populates="old_uris")
+    track = db.relationship("Tracks", back_populates="uris")
 
 
 class Streams(db.Model):
@@ -55,10 +55,10 @@ class Tracks(db.Model):
     __tablename__: str = "tracks"
 
     id: int = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    uri: str = db.Column(db.String, nullable=False, unique=True)
+    uri = db.Column(db.String, nullable=False, unique=True)
 
-    # One to many relationship with old_track_uris
-    old_uris = db.relationship("OldTrackUris", back_populates="track")
+    # One to many relationship with track_uris
+    uris = db.relationship("TrackUris", back_populates="track")
 
     # Many to one relationship to albums
     album_id = db.Column(db.Integer, db.ForeignKey("albums.id"))
