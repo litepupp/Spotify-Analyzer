@@ -25,7 +25,7 @@ class Populator:
         """
 
         self.loaded_track_uris: set[str] = set()
-        self.current_track_uris: dict[str, int] = {}
+        self.current_trackuri_records: dict[str, int] = {}
         self.loaded_stream_objects = []
 
         self.auth_file_path = auth_file_path
@@ -85,15 +85,13 @@ class Populator:
         ...
         """
 
-        self.current_track_uris = {
-            uri: id for uri, id in db.session.query(TrackUris).all()
-        }
+        self.current_trackuri_records = dict(db.session.query(TrackUris).all())
 
         unseen_track_uris = list(
-            self.loaded_track_uris - self.current_track_uris.keys()
+            self.loaded_track_uris - self.current_trackuri_records.keys()
         )
 
-        print(f"self.current_track_uris: {len(self.current_track_uris)}")
+        print(f"self.current_trackuri_records: {len(self.current_trackuri_records)}")
         print(f"self.loaded_track_uris: {len(self.loaded_track_uris)}")
         print(f"unseen_track_uris: {len(unseen_track_uris)}")
 
@@ -101,7 +99,7 @@ class Populator:
 
         print("Processing loaded Track URIs")
         for unseen_track_uri in tqdm.tqdm(unseen_track_uris):
-            if unseen_track_uri in self.current_track_uris:
+            if unseen_track_uri in self.current_trackuri_records:
                 continue
 
             unseen_track_uris_batch.append(unseen_track_uri)
@@ -119,19 +117,26 @@ class Populator:
         """
 
         # List of 50 track objects returned by spotify API
-        tracks_data = self.sp_client.tracks(unseen_track_uris_batch, market="JP")
-        if tracks_data is None:
+        track_objects = self.sp_client.tracks(unseen_track_uris_batch, market="JP")
+        if track_objects is None:
             return
 
-        for unseen_track_uri, track_data in zip(
-            unseen_track_uris_batch, tracks_data["tracks"]
+        new_trackuri_records = []
+
+        for unseen_track_uri, track_object in zip(
+            unseen_track_uris_batch, track_objects["tracks"]
         ):
-            if track_data["uri"] in self.current_track_uris:
-                db.session.add(
+            if track_object["uri"] in self.current_trackuri_records:
+                self.current_trackuri_records[
+                    unseen_track_uri
+                ] = self.current_trackuri_records[track_object["uri"]]
+                new_trackuri_records.append(
                     TrackUris(
                         uri=unseen_track_uri,
-                        track_id=self.current_track_uris[track_data["uri"]],
+                        track_id=self.current_trackuri_records[track_object["uri"]],
                     )
                 )
-                db.session.commit()
                 continue
+
+        db.session.bulk_save_objects(new_trackuri_records)
+        db.session.commit()
