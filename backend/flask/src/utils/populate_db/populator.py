@@ -41,7 +41,8 @@ class Populator:
         self.loaded_genre_names: dict[str, list[Artists]] = {}
 
         self.current_trackuri_records: dict[str, Tracks] = {
-            track.uri: track for track in db.session.query(Tracks).all()
+            trackuri.uri: trackuri.track
+            for trackuri in db.session.query(TrackUris).all()
         }
         self.current_album_records: dict[str, Albums] = {
             album.uri: album for album in db.session.query(Albums).all()
@@ -492,11 +493,13 @@ class Populator:
 
         print("\nLinking Streams")
         for stream in tqdm.tqdm(new_stream_records):
-            for track_artist in stream.track.artists:
-                track_artist.streams.append(stream)
+            if stream.track:
+                for track_artist in stream.track.artists:
+                    track_artist.streams.append(stream)
 
-            for album_artist in stream.album.artists:
-                album_artist.streams.append(stream)
+            if stream.album:
+                for album_artist in stream.album.artists:
+                    album_artist.streams.append(stream)
 
         db.session.commit()
 
@@ -504,11 +507,13 @@ class Populator:
         """
         ...
         """
-
+        
+        """
         self.process_loaded_track_uris()
         self.process_loaded_album_uris()
         self.process_loaded_artist_uris()
         self.process_loaded_label_names()
         self.process_loaded_genre_names()
         self.get_track_features()
+        """
         self.create_streams()
