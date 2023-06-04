@@ -80,12 +80,12 @@ def parse_release_date(
             if int(release_date) > 0
             else datetime.datetime.now()
         )
-    elif release_date_precision == "month":
+    if release_date_precision == "month":
         return datetime.datetime.strptime(release_date, "%Y-%m")
-    elif release_date_precision == "day":
+    if release_date_precision == "day":
         return datetime.datetime.strptime(release_date, "%Y-%m-%d")
-    else:
-        return datetime.datetime.now()
+
+    return datetime.datetime.now()
 
 
 def db_get_tracks(track_uris: list[str]) -> list[Tracks] | None:
@@ -524,14 +524,14 @@ def main() -> None:
     """
 
     # Path to file that contains client_id / client_secret
-    auth_file_path = "./auth.txt"
+    auth_file_path = os.path.abspath("./auth.txt")
     # Path holding all endsong.json files
-    streams_file_path = "./data/input/"
+    streams_file_path = os.path.abspath("./data/input/")
 
     app = create_app()
     with app.app_context():
         populator = Populator(auth_file_path, streams_file_path)
-        populator.process_loaded_track_uris()
+        populator.populate_db()
 
     """
     # Create new spotipy client using credentials in auth_file_path
