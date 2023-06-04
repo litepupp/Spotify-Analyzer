@@ -12,7 +12,7 @@ import spotipy
 import tqdm
 
 from src.server.extensions import db
-from src.models.models import TrackUris, Tracks, Albums
+from src.models.models import TrackUris, Tracks, Albums, Artists
 
 
 class Populator:
@@ -28,6 +28,7 @@ class Populator:
         self.loaded_stream_objects = []
         self.loaded_track_uris: set[str] = set()
         self.loaded_album_uris: dict[str, list[Tracks]] = {}
+        self.loaded_artist_uris: dict[str, tuple[list[Tracks], list[Albums]]] = {}
 
         self.current_trackuri_records: dict[str, int] = dict(
             db.session.query(TrackUris.uri, TrackUris.track_id).all()
@@ -35,8 +36,12 @@ class Populator:
         self.current_album_records: dict[str, int] = dict(
             db.session.query(Albums.uri, Albums.id).all()
         )
+        self.current_artist_records: dict[str, Artists] = {
+            artist.uri: artist for artist in db.session.query(Artists).all()
+        }
 
         self.new_trackuri_records: list[TrackUris] = []
+        self.new_album_records: list[Albums] = []
 
         self.auth_file_path: str = auth_file_path
         self.streams_file_path: str = streams_file_path
@@ -113,7 +118,7 @@ class Populator:
         ...
         """
 
-        # List of 50 track objects returned by spotify API
+        # List of 50 Track objects returned by spotify API
         track_objects = self.sp_client.tracks(unseen_track_uris_batch, market="JP")
         if track_objects is None:
             return
@@ -168,6 +173,23 @@ class Populator:
 
                 self.loaded_album_uris[album_uri].append(new_track_record)
 
+            for track_object_artist in track_object["artists"]:
+                track_artist_uri: str = track_object_artist["uri"]
+                track_artist: Artists | None = self.current_artist_records.get(
+                    track_artist_uri
+                )
+
+                if track_artist is None:
+                    if track_artist_uri not in self.loaded_artist_uris:
+                        self.loaded_artist_uris[track_artist_uri] = ([], [])
+
+                    self.loaded_artist_uris[track_artist_uri][0].append(
+                        new_track_record
+                    )
+                    continue
+
+                track_artist.tracks.append(new_track_record)
+
     def process_loaded_album_uris(self) -> None:
         """
         ...
@@ -181,6 +203,9 @@ class Populator:
         for pos in tqdm.tqdm(range(0, len(unseen_album_uris), 20)):
             self.process_unseen_album_uris_batch(unseen_album_uris[pos : pos + 20])
 
+        db.session.bulk_save_objects(self.new_album_records)
+        db.session.commit()
+
     def process_unseen_album_uris_batch(
         self, unseen_album_uris_batch: list[tuple[str, list[Tracks]]]
     ) -> None:
@@ -188,7 +213,52 @@ class Populator:
         ...
         """
 
-        print(unseen_album_uris_batch)
+        # List of 20 Album objects returned by spotify API
+        album_objects = self.sp_client.albums(
+            [album_uri for album_uri, _ in unseen_album_uris_batch], market="JP"
+        )
+        if album_objects is None:
+            return
+
+        for album_object in album_objects["albums"]:
+            new_album_record = Albums(
+                uri=album_object["uri"],
+                album_type=album_object["album_type"],
+                total_tracks=album_object["total_tracks"],
+                name=album_object["name"],
+                release_date=self.parse_release_date(
+                    album_object["release_date"],
+                    album_object["release_date_precision"],
+                ),
+                label=album_object["label"],
+                popularity=album_object["popularity"],
+                image_url=album_object["images"][0]["url"]
+                if album_object["images"]
+                else None,
+                created_date=datetime.datetime.now(datetime.timezone.utc),
+                modified_date=datetime.datetime.now(datetime.timezone.utc),
+            )
+            self.new_album_records.append(new_album_record)
+
+    def parse_release_date(
+        self, release_date: str, release_date_precision: str
+    ) -> datetime.datetime:
+        """
+        ...
+        """
+
+        if release_date_precision == "year":
+            return (
+                datetime.datetime.strptime(release_date, "%Y")
+                if int(release_date) > 0
+                else datetime.datetime.now()
+            )
+        if release_date_precision == "month":
+            return datetime.datetime.strptime(release_date, "%Y-%m")
+        if release_date_precision == "day":
+            return datetime.datetime.strptime(release_date, "%Y-%m-%d")
+
+        return datetime.datetime.now()
 
     def populate_db(self) -> None:
         """
