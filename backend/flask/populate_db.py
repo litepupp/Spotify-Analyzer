@@ -533,24 +533,6 @@ def main() -> None:
         populator = Populator(auth_file_path, streams_file_path)
         populator.populate_db()
 
-    """
-    # Create new spotipy client using credentials in auth_file_path
-    sp_client = create_spotify_client(auth_file_path)
-    # Get list of all unique track_uris in streams data and streams objects themselves
-    unique_track_uris, stream_objects = load_stream_objects(json_file_path)
-
-    # Create cache for album and artist uris ...
-    data_cache: dict = {"albums": {}, "artists": {}}
-
-    # Create app and use context to access database
-    app = create_app()
-    with app.app_context():
-        # Begin processing all unique track_uris from streams
-        process_unique_track_uris(unique_track_uris, sp_client, data_cache)
-        # get_track_features(sp_client)
-        # create_streams(stream_objects)
-    """
-
 
 if __name__ == "__main__":
     main()

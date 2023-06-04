@@ -78,6 +78,7 @@ class Tracks(db.Model):
     duration_ms: int = db.Column(db.Integer, nullable=False)
     explicit: bool = db.Column(db.Boolean, nullable=False)
     name: str = db.Column(db.String, nullable=False)
+    album_name: str = db.Column(db.String)
     popularity: int = db.Column(db.Integer, nullable=False)
     preview_url: str = db.Column(db.String)
     track_number: int = db.Column(db.Integer, nullable=False)
@@ -119,11 +120,15 @@ class Albums(db.Model):
     # Many to many relationship with genres using genres_albums association table
     genres = db.relationship("Genres", secondary=genres_albums, back_populates="albums")
 
+    # Many to one relationship to labels
+    label_id = db.Column(db.Integer, db.ForeignKey("labels.id"))
+    label = db.relationship("Labels", back_populates="albums")
+
     album_type: str = db.Column(db.String, nullable=False)
     total_tracks: int = db.Column(db.Integer, nullable=False)
     name: str = db.Column(db.String, nullable=False)
     release_date: datetime = db.Column(db.DateTime, nullable=False)
-    label: str = db.Column(db.String)
+    label_name: str = db.Column(db.String, nullable=False)
     popularity: int = db.Column(db.Integer, nullable=False)
     image_url: str = db.Column(db.String)
 
@@ -164,6 +169,16 @@ class Artists(db.Model):
 
     created_date: datetime = db.Column(db.DateTime, nullable=False)
     modified_date: datetime = db.Column(db.DateTime, nullable=False)
+
+
+class Labels(db.Model):
+    __tablename__: str = "labels"
+
+    id: int = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name: str = db.Column(db.String, nullable=False, unique=True)
+
+    # One to many relationship with albums
+    albums = db.relationship("Albums", back_populates="label")
 
 
 class Genres(db.Model):

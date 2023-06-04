@@ -12,7 +12,7 @@ import spotipy
 import tqdm
 
 from src.server.extensions import db
-from src.models.models import TrackUris, Tracks, Albums, Artists
+from src.models.models import TrackUris, Tracks, Albums, Artists, Labels, Genres
 
 
 class Populator:
@@ -29,19 +29,26 @@ class Populator:
         self.loaded_track_uris: set[str] = set()
         self.loaded_album_uris: dict[str, list[Tracks]] = {}
         self.loaded_artist_uris: dict[str, tuple[list[Tracks], list[Albums]]] = {}
+        self.loaded_label_names: dict[str, list[Albums]] = {}
+        self.loaded_genre_names: dict[str, list[Artists]] = {}
 
-        self.current_trackuri_records: dict[str, int] = dict(
-            db.session.query(TrackUris.uri, TrackUris.track_id).all()
-        )
-        self.current_album_records: dict[str, int] = dict(
-            db.session.query(Albums.uri, Albums.id).all()
-        )
+        self.current_trackuri_records: dict[str, Tracks] = {
+            track.uri: track for track in db.session.query(Tracks).all()
+        }
+        self.current_album_records: dict[str, Albums] = {
+            album.uri: album for album in db.session.query(Albums).all()
+        }
         self.current_artist_records: dict[str, Artists] = {
             artist.uri: artist for artist in db.session.query(Artists).all()
         }
+        self.current_label_records: dict[str, Labels] = {
+            label.name: label for label in db.session.query(Labels).all()
+        }
+        self.current_genre_records: dict[str, Genres] = {
+            genre.name: genre for genre in db.session.query(Genres).all()
+        }
 
         self.new_trackuri_records: list[TrackUris] = []
-        self.new_album_records: list[Albums] = []
 
         self.auth_file_path: str = auth_file_path
         self.streams_file_path: str = streams_file_path
@@ -76,7 +83,7 @@ class Populator:
         if not os.path.exists(self.streams_file_path):
             sys.exit(f"input_path {self.streams_file_path} does not exist")
 
-        print("Loading Track URIs and Stream objects")
+        print("\nLoading Track URIs and Stream objects")
         for current_file_path in tqdm.tqdm(
             glob.glob(self.streams_file_path + "/*.json")
         ):
@@ -104,9 +111,10 @@ class Populator:
             self.loaded_track_uris - self.current_trackuri_records.keys()
         )
 
-        print("Processing loaded Track URIs")
+        print("\nProcessing loaded Track URIs")
         for pos in tqdm.tqdm(range(0, len(unseen_track_uris), 50)):
             self.process_unseen_track_uris_batch(unseen_track_uris[pos : pos + 50])
+            break
 
         db.session.bulk_save_objects(self.new_trackuri_records)
         db.session.commit()
@@ -128,7 +136,7 @@ class Populator:
         ):
             track_uri: str = track_object["uri"]
             album_uri: str = track_object["album"]["uri"]
-            album_id: int | None = self.current_album_records.get(album_uri)
+            album: Albums | None = self.current_album_records.get(album_uri)
 
             if track_uri in self.current_trackuri_records:
                 if track_uri != unseen_track_uri:
@@ -138,14 +146,15 @@ class Populator:
                     self.new_trackuri_records.append(
                         TrackUris(
                             uri=unseen_track_uri,
-                            track_id=self.current_trackuri_records[unseen_track_uri],
+                            track_id=self.current_trackuri_records[unseen_track_uri].id,
                         )
                     )
                 continue
 
             new_track_record: Tracks = Tracks(
                 uri=track_uri,
-                album_id=album_id,
+                album_id=album.id if album else None,
+                album_name=album.name if album else None,
                 disc_number=track_object["disc_number"],
                 duration_ms=track_object["duration_ms"],
                 explicit=track_object["explicit"],
@@ -159,7 +168,7 @@ class Populator:
             db.session.add(new_track_record)
             db.session.commit()
 
-            self.current_trackuri_records[track_uri] = new_track_record.id
+            self.current_trackuri_records[track_uri] = new_track_record
             self.new_trackuri_records.append(
                 TrackUris(
                     uri=track_uri,
@@ -167,7 +176,7 @@ class Populator:
                 )
             )
 
-            if album_id is None:
+            if album is None:
                 if album_uri not in self.loaded_album_uris:
                     self.loaded_album_uris[album_uri] = []
 
@@ -199,12 +208,10 @@ class Populator:
             self.loaded_album_uris.items()
         )
 
-        print("Processing loaded Album URIs")
+        print("\nProcessing loaded Album URIs")
         for pos in tqdm.tqdm(range(0, len(unseen_album_uris), 20)):
             self.process_unseen_album_uris_batch(unseen_album_uris[pos : pos + 20])
-
-        db.session.bulk_save_objects(self.new_album_records)
-        db.session.commit()
+            break
 
     def process_unseen_album_uris_batch(
         self, unseen_album_uris_batch: list[tuple[str, list[Tracks]]]
@@ -215,13 +222,18 @@ class Populator:
 
         # List of 20 Album objects returned by spotify API
         album_objects = self.sp_client.albums(
-            [album_uri for album_uri, _ in unseen_album_uris_batch], market="JP"
+            [album_uri for (album_uri, _) in unseen_album_uris_batch], market="JP"
         )
         if album_objects is None:
             return
 
-        for album_object in album_objects["albums"]:
-            new_album_record = Albums(
+        for album_object, (_, tracks) in zip(
+            album_objects["albums"], unseen_album_uris_batch
+        ):
+            label_name: str = album_object["label"]
+            label: Labels | None = self.current_label_records.get(label_name)
+
+            new_album_record: Albums = Albums(
                 uri=album_object["uri"],
                 album_type=album_object["album_type"],
                 total_tracks=album_object["total_tracks"],
@@ -230,7 +242,8 @@ class Populator:
                     album_object["release_date"],
                     album_object["release_date_precision"],
                 ),
-                label=album_object["label"],
+                label_id=label.id if label else None,
+                label_name=label_name,
                 popularity=album_object["popularity"],
                 image_url=album_object["images"][0]["url"]
                 if album_object["images"]
@@ -238,7 +251,137 @@ class Populator:
                 created_date=datetime.datetime.now(datetime.timezone.utc),
                 modified_date=datetime.datetime.now(datetime.timezone.utc),
             )
-            self.new_album_records.append(new_album_record)
+            db.session.add(new_album_record)
+            db.session.commit()
+
+            new_album_record.tracks.extend(tracks)
+            db.session.commit()
+
+            if label is None:
+                if label_name not in self.loaded_label_names:
+                    self.loaded_label_names[label_name] = []
+
+                self.loaded_label_names[label_name].append(new_album_record)
+
+            for album_object_artist in album_object["artists"]:
+                album_artist_uri: str = album_object_artist["uri"]
+                album_artist: Artists | None = self.current_artist_records.get(
+                    album_artist_uri
+                )
+
+                if album_artist is None:
+                    if album_artist_uri not in self.loaded_artist_uris:
+                        self.loaded_artist_uris[album_artist_uri] = ([], [])
+
+                    self.loaded_artist_uris[album_artist_uri][1].append(
+                        new_album_record
+                    )
+                    continue
+
+                album_artist.albums.append(new_album_record)
+                db.session.commit()
+
+    def process_loaded_artist_uris(self) -> None:
+        """
+        ...
+        """
+
+        unseen_artist_uris: list[tuple[str, tuple[list[Tracks], list[Albums]]]] = list(
+            self.loaded_artist_uris.items()
+        )
+
+        print("\nProcessing loaded Artist URIs")
+        for pos in tqdm.tqdm(range(0, len(unseen_artist_uris), 50)):
+            self.process_unseen_artist_uris_batch(unseen_artist_uris[pos : pos + 50])
+            break
+
+    def process_unseen_artist_uris_batch(
+        self,
+        unseen_artist_uris_batch: list[tuple[str, tuple[list[Tracks], list[Albums]]]],
+    ) -> None:
+        """
+        ...
+        """
+
+        # List of 50 Artist objects returned by spotify API
+        artist_objects = self.sp_client.artists(
+            [artist_uri for (artist_uri, _) in unseen_artist_uris_batch]
+        )
+        if artist_objects is None:
+            return
+
+        for artist_object, (_, (tracks, albums)) in zip(
+            artist_objects["albums"], unseen_artist_uris_batch
+        ):
+            new_artist_record: Artists = Artists(
+                uri=artist_object["uri"],
+                followers=artist_object["followers"]["total"],
+                name=artist_object["name"],
+                popularity=artist_object["popularity"],
+                image_url=artist_object["images"][0]["url"]
+                if artist_object["images"]
+                else None,
+                created_date=datetime.datetime.now(datetime.timezone.utc),
+                modified_date=datetime.datetime.now(datetime.timezone.utc),
+            )
+
+            db.session.add(new_artist_record)
+            db.session.commit()
+
+            new_artist_record.tracks.extend(tracks)
+            new_artist_record.albums.extend(albums)
+            db.session.commit()
+
+            for genre_name in artist_object["genres"]:
+                genre: Genres | None = self.current_genre_records.get(genre_name)
+
+                if genre is None:
+                    if genre_name not in self.loaded_genre_names:
+                        self.loaded_genre_names[genre_name] = []
+
+                    self.loaded_genre_names[genre_name].append(new_artist_record)
+                    continue
+
+                genre.artists.append(new_artist_record)
+                db.session.commit()
+
+    def process_loaded_label_names(self) -> None:
+        """
+        ...
+        """
+
+        unseen_label_names: list[tuple[str, list[Albums]]] = list(
+            self.loaded_label_names.items()
+        )
+
+        print("\nProcessing loaded Label names")
+        for label_name, albums in tqdm.tqdm(unseen_label_names):
+            new_label_record: Labels = Labels(name=label_name)
+
+            db.session.add(new_label_record)
+            db.session.commit()
+
+            new_label_record.albums.extend(albums)
+            db.session.commit()
+
+    def process_loaded_genre_names(self) -> None:
+        """
+        ...
+        """
+
+        unseen_genre_names: list[tuple[str, list[Artists]]] = list(
+            self.loaded_genre_names.items()
+        )
+
+        print("\nProcessing loaded Genre names")
+        for genre_name, artists in tqdm.tqdm(unseen_genre_names):
+            new_genre_record: Genres = Genres(name=genre_name)
+
+            db.session.add(new_genre_record)
+            db.session.commit()
+
+            new_genre_record.artists.extend(artists)
+            db.session.commit
 
     def parse_release_date(
         self, release_date: str, release_date_precision: str
@@ -267,3 +410,6 @@ class Populator:
 
         self.process_loaded_track_uris()
         self.process_loaded_album_uris()
+        self.process_loaded_artist_uris()
+        self.process_loaded_label_names()
+        self.process_loaded_genre_names()
