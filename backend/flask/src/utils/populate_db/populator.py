@@ -507,13 +507,11 @@ class Populator:
         """
         ...
         """
-        
-        """
+
         self.process_loaded_track_uris()
         self.process_loaded_album_uris()
         self.process_loaded_artist_uris()
         self.process_loaded_label_names()
         self.process_loaded_genre_names()
         self.get_track_features()
-        """
         self.create_streams()
