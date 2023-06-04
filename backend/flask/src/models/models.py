@@ -28,10 +28,12 @@ class Streams(db.Model):
 
     # Many to one relationship to tracks
     track_id = db.Column(db.Integer, db.ForeignKey("tracks.id"), nullable=False)
+    track_name: str = db.Column(db.String)
     track = db.relationship("Tracks", back_populates="streams")
 
     # Many to one relationship to albums
     album_id = db.Column(db.Integer, db.ForeignKey("albums.id"), nullable=False)
+    album_name: str = db.Column(db.String)
     album = db.relationship("Albums", back_populates="streams")
 
     # Many to many relationship with artists using artists_streams association table
@@ -61,6 +63,7 @@ class Tracks(db.Model):
 
     # Many to one relationship to albums
     album_id = db.Column(db.Integer, db.ForeignKey("albums.id"))
+    album_name: str = db.Column(db.String)
     album = db.relationship("Albums", back_populates="tracks")
 
     # Many to many relationship with artists using artists_tracks association table
@@ -78,7 +81,6 @@ class Tracks(db.Model):
     duration_ms: int = db.Column(db.Integer, nullable=False)
     explicit: bool = db.Column(db.Boolean, nullable=False)
     name: str = db.Column(db.String, nullable=False)
-    album_name: str = db.Column(db.String)
     popularity: int = db.Column(db.Integer, nullable=False)
     preview_url: str = db.Column(db.String)
     track_number: int = db.Column(db.Integer, nullable=False)
@@ -128,7 +130,7 @@ class Albums(db.Model):
     total_tracks: int = db.Column(db.Integer, nullable=False)
     name: str = db.Column(db.String, nullable=False)
     release_date: datetime = db.Column(db.DateTime, nullable=False)
-    label_name: str = db.Column(db.String, nullable=False)
+    label_name: str = db.Column(db.String)
     popularity: int = db.Column(db.Integer, nullable=False)
     image_url: str = db.Column(db.String)
 

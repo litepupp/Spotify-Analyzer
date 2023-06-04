@@ -12,7 +12,15 @@ import spotipy
 import tqdm
 
 from src.server.extensions import db
-from src.models.models import TrackUris, Tracks, Albums, Artists, Labels, Genres
+from src.models.models import (
+    TrackUris,
+    Tracks,
+    Albums,
+    Artists,
+    Labels,
+    Genres,
+    Streams,
+)
 
 
 class Populator:
@@ -114,7 +122,6 @@ class Populator:
         print("\nProcessing loaded Track URIs")
         for pos in tqdm.tqdm(range(0, len(unseen_track_uris), 50)):
             self.process_unseen_track_uris_batch(unseen_track_uris[pos : pos + 50])
-            break
 
         db.session.bulk_save_objects(self.new_trackuri_records)
         db.session.commit()
@@ -211,7 +218,6 @@ class Populator:
         print("\nProcessing loaded Album URIs")
         for pos in tqdm.tqdm(range(0, len(unseen_album_uris), 20)):
             self.process_unseen_album_uris_batch(unseen_album_uris[pos : pos + 20])
-            break
 
     def process_unseen_album_uris_batch(
         self, unseen_album_uris_batch: list[tuple[str, list[Tracks]]]
@@ -254,10 +260,12 @@ class Populator:
             db.session.add(new_album_record)
             db.session.commit()
 
-            new_album_record.tracks.extend(tracks)
+            for track in tracks:
+                track.album_name = new_album_record.name
+                new_album_record.tracks.append(track)
             db.session.commit()
 
-            if label is None:
+            if label is None and label_name is not None:
                 if label_name not in self.loaded_label_names:
                     self.loaded_label_names[label_name] = []
 
@@ -293,7 +301,6 @@ class Populator:
         print("\nProcessing loaded Artist URIs")
         for pos in tqdm.tqdm(range(0, len(unseen_artist_uris), 50)):
             self.process_unseen_artist_uris_batch(unseen_artist_uris[pos : pos + 50])
-            break
 
     def process_unseen_artist_uris_batch(
         self,
@@ -311,7 +318,7 @@ class Populator:
             return
 
         for artist_object, (_, (tracks, albums)) in zip(
-            artist_objects["albums"], unseen_artist_uris_batch
+            artist_objects["artists"], unseen_artist_uris_batch
         ):
             new_artist_record: Artists = Artists(
                 uri=artist_object["uri"],
@@ -381,7 +388,7 @@ class Populator:
             db.session.commit()
 
             new_genre_record.artists.extend(artists)
-            db.session.commit
+            db.session.commit()
 
     def parse_release_date(
         self, release_date: str, release_date_precision: str
@@ -403,6 +410,96 @@ class Populator:
 
         return datetime.datetime.now()
 
+    def get_track_features(self) -> None:
+        """
+        ...
+        """
+
+        tracks: list[Tracks] = list(self.current_trackuri_records.values())
+        track_uris: list[str] = [track.uri for track in tracks]
+
+        print("\nGetting Track Features")
+        for pos in tqdm.tqdm(range(0, len(tracks), 100)):
+            track_uris_batch = track_uris[pos : pos + 100]
+
+            features_batch = self.sp_client.audio_features(track_uris_batch)
+            if features_batch is None:
+                return
+
+            for i, features in enumerate(features_batch):
+                if not features:
+                    continue
+                track = tracks[pos + i]
+                track.acousticness = features["acousticness"]
+                track.danceability = features["danceability"]
+                track.energy = features["energy"]
+                track.instrumentalness = features["instrumentalness"]
+                track.key = features["key"]
+                track.liveness = features["liveness"]
+                track.loudness = features["loudness"]
+                track.mode = features["mode"]
+                track.speechiness = features["speechiness"]
+                track.tempo = features["tempo"]
+                track.time_signature = features["time_signature"]
+                track.valence = features["valence"]
+
+            db.session.commit()
+
+    def create_streams(self) -> None:
+        """
+        ...
+        """
+
+        new_stream_records: list[Streams] = []
+
+        print("\nCreating Streams")
+        for stream_object in tqdm.tqdm(self.loaded_stream_objects):
+            if stream_object["spotify_track_uri"] is not None:
+                track = self.current_trackuri_records.get(
+                    stream_object["spotify_track_uri"]
+                )
+                if track is None:
+                    continue
+
+                new_stream_records.append(
+                    Streams(
+                        track_id=track.id,
+                        track_name=track.name,
+                        album_id=track.album_id,
+                        album_name=track.album.name,
+                        stream_date=datetime.datetime.strptime(
+                            stream_object["ts"], "%Y-%m-%dT%H:%M:%SZ"
+                        ),
+                        ms_played=stream_object["ms_played"],
+                        ratio_played=min(
+                            stream_object["ms_played"] / track.duration_ms, 1.0
+                        )
+                        if track.duration_ms > 0
+                        else 0.0,
+                        reason_start=stream_object["reason_start"],
+                        reason_end=stream_object["reason_end"],
+                        shuffle=stream_object["shuffle"],
+                        created_date=datetime.datetime.now(datetime.timezone.utc),
+                        modified_date=datetime.datetime.now(datetime.timezone.utc),
+                    )
+                )
+
+        # Batch insertion of streams
+        print("Saving...", end="")
+        db.session.bulk_save_objects(new_stream_records)
+        db.session.commit()
+        print("DONE!")
+
+        print("\nLinking Streams")
+        for stream in tqdm.tqdm(new_stream_records):
+            for track_artist in stream.track.artists:
+                track_artist.streams.append(stream)
+
+            for album_artist in stream.album.artists:
+                album_artist.streams.append(stream)
+
+        db.session.commit()
+
     def populate_db(self) -> None:
         """
         ...
@@ -413,3 +510,5 @@ class Populator:
         self.process_loaded_artist_uris()
         self.process_loaded_label_names()
         self.process_loaded_genre_names()
+        self.get_track_features()
+        self.create_streams()
