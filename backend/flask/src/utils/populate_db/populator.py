@@ -487,19 +487,18 @@ class Populator:
 
         # Batch insertion of streams
         print("Saving...", end="")
-        db.session.bulk_save_objects(new_stream_records)
+        db.session.add_all(new_stream_records)
         db.session.commit()
         print("DONE!")
 
         print("\nLinking Streams")
         for stream in tqdm.tqdm(new_stream_records):
-            if stream.track:
-                for track_artist in stream.track.artists:
-                    track_artist.streams.append(stream)
-
-            if stream.album:
-                for album_artist in stream.album.artists:
-                    album_artist.streams.append(stream)
+            stream.artists.extend(
+                {
+                    artist.uri: artist
+                    for artist in stream.track.artists + stream.album.artists
+                }.values()
+            )
 
         db.session.commit()
 
