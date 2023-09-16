@@ -9,5 +9,4 @@ const StreamsService = {
   },
 };
 
-
 export { StreamsService };
